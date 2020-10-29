@@ -6,14 +6,8 @@ This is a temporary script file.
 """
 import numpy as np
 from scipy.integrate import ode
-import noise
 
-from contextlib import redirect_stdout
-import os
-import sys
 import time
-
-from PIL import Image
 
 from art_utils.cairo_painter import CairoPainter
 from art_utils.gradient import build_gradient
@@ -60,9 +54,11 @@ N_STROKES_X = 120 # pts
 N_STROKES_Y = 120 # pts
 STROKE_PTS = 20 # pts
 MAX_STROKE_DIST = int(3*WIDTH/N_STROKES_X)
-MAX_STROKE_STEP_DIST = int(WIDTH/N_STROKES_X)
-TIME_STEP = 1
-TIME_STEPS = 50
+MAX_STROKE_STEP_DIST = 4
+MAX_STROKE_STEP_DIST_SQ = MAX_STROKE_STEP_DIST**2
+TIME_STEP = 2
+TIME_STEPS = 20
+print('Max step length {} line length {}'.format(MAX_STROKE_STEP_DIST, MAX_STROKE_STEP_DIST*TIME_STEPS))
 TIME_LEN = TIME_STEP * TIME_STEPS
 
 starttime = time.time()
@@ -105,21 +101,13 @@ cmap = np.clip(cmap, 0, 1)
 painter = CairoPainter(width=WIDTH, height=HEIGHT, bg=[0xf4/0xFF,0xf6/0xFF,0xf3/0xFF])
 painter.insert_borders(XBORDER, YBORDER)
 
-s = np.ma.sqrt(Bx**2,By**2) # Essentially magnitude
+# Normalize the vector field. This simplifies the streamline drawing process
+s = np.ma.sqrt(Bx**2+By**2) # Magnitude
+By = By / s
+Bx = Bx / s
 
 x_sep = WIDTH/N_STROKES_X
 y_sep = HEIGHT/N_STROKES_Y
-
-def dfun(t, xy):
-    grid_x = xy[0]/(WIDTH/XRES)
-    grid_y = xy[1]/(HEIGHT/YRES)
-    
-    ds_dt = interpgrid(s, grid_x, grid_y)
-    Bx_i = interpgrid(Bx, grid_x, grid_y)
-    By_i = interpgrid(By, grid_x, grid_y)
-    # Apply movement due to the field
-    dt_ds = 1. / ds_dt
-    return [Bx_i * dt_ds, By_i * dt_ds]
 
 # Generate a list of start points for the strokes
 mesh = np.array(np.meshgrid(range(N_STROKES_X), range(N_STROKES_Y)), dtype=np.float64)
@@ -141,6 +129,7 @@ frame_num = 0
 # Plot integrated strokes, in order of starting magnitude
 line_pts = np.zeros((TIME_STEPS,2))
 for startpoint_index in startpoint_indices_ordered:
+    # print(startpoint_index)
     start_x = stroke_start_pts[startpoint_index,0]
     start_y = stroke_start_pts[startpoint_index,1]
     num_line_pts=0
@@ -149,38 +138,22 @@ for startpoint_index in startpoint_indices_ordered:
 
     # Apply dithering
     #xi, yi = xi + (np.random.rand()-0.5)*x_sep, yi + (np.random.rand()-0.5)*y_sep 
-    dt = TIME_STEP
-    while True:
-        restart=False
-        num_line_pts = 0
-        line_pts[0] = [xi,yi]
+    t = 0
+    num_line_pts = 0
+    line_pts[0] = [xi,yi]
+    num_line_pts+=1
+    while t < TIME_LEN and num_line_pts < TIME_STEPS:
+        last_pt = line_pts[num_line_pts-1]
+        grid_x = last_pt[0]/(WIDTH/XRES)
+        grid_y = last_pt[1]/(HEIGHT/YRES)
+        Bx_i = interpgrid(Bx, grid_x, grid_y)
+        By_i = interpgrid(By, grid_x, grid_y)
+        dp = np.array([Bx_i,By_i])*TIME_STEP
+        stroke_d_delta_sq = dp[0]**2+dp[1]**2
+        pt = last_pt + dp
+        line_pts[num_line_pts]=pt
         num_line_pts+=1
-
-        r = ode(dfun)
-        r.set_initial_value([xi,yi], 0)
-        stroke_d = 0
-        while r.successful() and r.t < TIME_LEN:
-            try:
-                pt = r.integrate(r.t+dt)
-                dp = pt-line_pts[num_line_pts-1]
-                stroke_d_delta = np.sqrt(dp[0]**2+dp[1]**2)
-                stroke_d += stroke_d_delta
-                if stroke_d_delta >= MAX_STROKE_STEP_DIST or stroke_d >= MAX_STROKE_DIST:
-                    restart=True
-                    break
-                if pt[0] < 0 or pt[0] > WIDTH or pt[1] < 0 or pt[1] > HEIGHT:
-                    break
-                line_pts[num_line_pts]=pt
-                num_line_pts+=1
-                
-                
-            except IndexError:
-                break
-        
-        # print(num_line_pts)
-        if num_line_pts == 1 or restart:
-            dt = dt / 2
-        else:
+        if pt[0] < 0 or pt[0] > WIDTH or pt[1] < 0 or pt[1] > HEIGHT:
             break
     
     grid_x = xi/(WIDTH/XRES)
@@ -204,3 +177,5 @@ if ANIMATE:
         painter.output_frame()
 else:
     painter.output_snapshot('./single_frame.png')
+
+print('Finished generating in {}s'.format(time.time()-starttime))
