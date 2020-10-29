@@ -1,86 +1,52 @@
-# -*- coding: utf-8 -*-
-"""
-Spyder Editor
-
-This is a temporary script file.
-"""
 import numpy as np
-from scipy.integrate import ode
-
 import time
-
 from art_utils.cairo_painter import CairoPainter
 from art_utils.gradient import build_gradient
-
 from art_utils.interp import interpgrid
 
-N_PTS = 16
-# Linkedin size 1584x396
-# WIDTH=1584 # px
-# HEIGHT=396 # px
-WIDTH=1080 # px
-HEIGHT=1080 # px
-XRES=8*90 # pts
-YRES=8*90 # pts
-# XRES = 400
-# YRES = 100
-XBORDER = 40
-YBORDER = 40
+N_PTS = 16 # The number of infinite wires to place
+WIDTH=1080 # Image width (px)
+HEIGHT=1080 # Image height (px)
+XRES=8*90 # Field Resolution (indices)
+YRES=8*90 # Field Resolution (indices)
+XBORDER = 40 # Pixels
+YBORDER = 40 # Pixels
+GRADIENT_RES = 4096 # Number of discrete colors in the gradient
+ANIMATE = False # Whether or not to output individual frames
 
-GRADIENT_RES = 4096
-
-ANIMATE = False
-
-# colorlist = ["FFC800","C57B57","CBF7ED","5B9279","F24333","BA1B1D"]
-#colorlist = ["5B9279","CBF7ED","FFC800","C57B57","F24333","BA1B1D"]
-# colorlist = ["2F4B26","85BDA6","85BDA6","0C7797","67697C","484D6D"]
-# colorlist = ["2F4B26","85BDA6","85BDA6","0C7797","0C7797","484D6D"]
-colorlist = ["2F4B26","85BDA6","85BDA6","0C7797","0C7797","1F2041"]
-
-
-gradient_pts = [[0,0.33],[0.33,0.66],[0.66,1.0]]
-
-gradient = build_gradient(colorlist, gradient_pts, resolution=GRADIENT_RES)
-
-#print(gradient)
-# print(colorlist)
-DIPOLE_SEPARATION = 400 # px
-
-# N_STROKES_X = 60*4
-# N_STROKES_Y = 60
-# N_STROKES_X = 80
-# N_STROKES_Y = 45
 N_STROKES_X = 120 # pts
 N_STROKES_Y = 120 # pts
-STROKE_PTS = 20 # pts
 MAX_STROKE_DIST = int(3*WIDTH/N_STROKES_X)
-MAX_STROKE_STEP_DIST = 4
-MAX_STROKE_STEP_DIST_SQ = MAX_STROKE_STEP_DIST**2
-TIME_STEP = 2
-TIME_STEPS = 20
-print('Max step length {} line length {}'.format(MAX_STROKE_STEP_DIST, MAX_STROKE_STEP_DIST*TIME_STEPS))
+TIME_STEP = 0.5
+TIME_STEPS = 40
+
+# Put together a gradient
+colorlist = ["2F4B26","85BDA6","85BDA6","0C7797","0C7797","1F2041"]
+gradient_pts = [[0,0.33],[0.33,0.66],[0.66,1.0]]
+gradient = build_gradient(colorlist, gradient_pts, resolution=GRADIENT_RES)
+
+print('Expected line length {}'.format(TIME_STEP*TIME_STEPS))
 TIME_LEN = TIME_STEP * TIME_STEPS
 
 starttime = time.time()
-np.random.seed(98743)
 
 window_x = np.linspace(0,WIDTH,XRES)
 window_y = np.linspace(0,HEIGHT,YRES)
 
 pts = np.random.rand(N_PTS,2)*[WIDTH,HEIGHT]
-charges = (np.random.rand(N_PTS)/2+0.5)*np.random.choice([-1,1],N_PTS)
+currents = (np.random.rand(N_PTS)/2+0.5)*np.random.choice([-1,1],N_PTS)
     
 X,Y = np.meshgrid(window_x,window_y)
 
-Bx = np.zeros_like(X)# + 0.00001
-By = np.zeros_like(Y)# + 0.00001
+Bx = np.zeros_like(X)
+By = np.zeros_like(Y)
 cmap = np.zeros_like(X)
 
-for pt, q in zip(pts, charges):
+for pt, current in zip(pts, currents):
     sq_mag = (X-pt[0])**2 + (Y-pt[1])**2
     mag = np.sqrt(sq_mag)
 
-    Bmag = q/mag
+    Bmag = current/mag
     cmap += Bmag
     By += Bmag * np.cos(np.arctan2(Y-pt[1],X-pt[0]))
     Bx += Bmag * -np.sin(np.arctan2(Y-pt[1],X-pt[0]))
@@ -125,19 +91,15 @@ startpoint_indices_ordered = np.argsort(cmap_startpoints)
 cmap += (np.random.rand(cmap.shape[0],cmap.shape[1])-0.5)*0.1
 cmap = np.clip(cmap, 0, 1)
 
-frame_num = 0
 # Plot integrated strokes, in order of starting magnitude
 line_pts = np.zeros((TIME_STEPS,2))
 for startpoint_index in startpoint_indices_ordered:
-    # print(startpoint_index)
     start_x = stroke_start_pts[startpoint_index,0]
     start_y = stroke_start_pts[startpoint_index,1]
     num_line_pts=0
     xi = start_x * x_sep
     yi = start_y * y_sep
 
-    # Apply dithering
-    #xi, yi = xi + (np.random.rand()-0.5)*x_sep, yi + (np.random.rand()-0.5)*y_sep 
     t = 0
     num_line_pts = 0
     line_pts[0] = [xi,yi]
@@ -158,11 +120,7 @@ for startpoint_index in startpoint_indices_ordered:
     
     grid_x = xi/(WIDTH/XRES)
     grid_y = yi/(HEIGHT/YRES)
-    
     c = interpgrid(cmap, grid_x, grid_y)
-
-    # Outline
-    #painter.draw_line(line_pts[:num_line_pts], color=[0,0,0,0.2], width=10)
 
     # Actual line
     rgb = gradient[int(c*(GRADIENT_RES-1))]
