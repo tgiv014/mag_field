@@ -203,4 +203,4 @@ if ANIMATE:
     for i in range(60*5):
         painter.output_frame()
 else:
-    painter.output_frame()
+    painter.output_snapshot('./single_frame.png')
