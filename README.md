@@ -1,6 +1,8 @@
 # mag_field
 This project draws pretty picture of magnetic fields
 
+![Three Examples](static/threefold_small.png)
+
 # Method
 1. Pick a few random positions to place infinitely long wires perpendicular to the image plane.
 2. Pick random currents to flow through those wires.
@@ -9,6 +11,3 @@ This project draws pretty picture of magnetic fields
 5. Generate a list of points to start drawing streamlines from.
 6. Sort that list by the colormap value of each startpoint.
 7. Render every streamline with a maximum line distance for uniformity.
-
-# Results
-![asdf](static/single_frame.png)
