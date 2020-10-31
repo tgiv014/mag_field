@@ -1,34 +1,64 @@
 import numpy as np
 import time
+import argparse
+from yaml import load, dump
 from art_utils.cairo_painter import CairoPainter
-from art_utils.gradient import build_gradient
+from art_utils.gradient import build_gradient, color_from_hex
 from art_utils.interp import interpgrid
 
-N_PTS = 16 # The number of infinite wires to place
-WIDTH=1080 # Image width (px)
-HEIGHT=1080 # Image height (px)
-XRES=8*90 # Field Resolution (indices)
-YRES=8*90 # Field Resolution (indices)
-XBORDER = 40 # Pixels
-YBORDER = 40 # Pixels
-GRADIENT_RES = 4096 # Number of discrete colors in the gradient
-ANIMATE = False # Whether or not to output individual frames
+# Load the configuration file
+parser = argparse.ArgumentParser(description='Generate a random image of a magnetic field')
+parser.add_argument('config', type=argparse.FileType('r'))
+args = parser.parse_args()
+data = load(args.config) or dict()
 
-N_STROKES_X = 120 # pts
-N_STROKES_Y = 120 # pts
-MAX_STROKE_DIST = int(3*WIDTH/N_STROKES_X)
-TIME_STEP = 0.5
-TIME_STEPS = 40
+# Sanitize the configuration, insert defaults as needed
+colorlist = data.get('colors', [["fe7f2d","fcca46"],["fcca46","a1c181"],["a1c181","619b8a"],["619b8a","233d4d"]])
+colorpoints = data.get('color_points', [[0,0.25],[0.25,0.5],[0.5,0.75],[0.75,1.0]])
 
-# Put together a gradient
-colorlist = ["2F4B26","85BDA6","85BDA6","0C7797","0C7797","1F2041"]
-gradient_pts = [[0,0.33],[0.33,0.66],[0.66,1.0]]
-gradient = build_gradient(colorlist, gradient_pts, resolution=GRADIENT_RES)
+if len(colorlist) != len(colorpoints):
+    print('Colors and color points are not equal in length')
+    quit()
 
-print('Expected line length {}'.format(TIME_STEP*TIME_STEPS))
+GRADIENT_RES = data.get('gradient_res', 4096)
+
+image = data.get('image', {})
+WIDTH = image.get('width', 1080)
+HEIGHT = image.get('height', 1080)
+XBORDER = image.get('x_border', 0)
+YBORDER = image.get('y_border', 0)
+BG_COLOR = image.get('bg', 'FFFFFF')
+print('Image size {}x{}, borders {}x{}, bg {}'.format(WIDTH,HEIGHT,XBORDER,YBORDER,BG_COLOR))
+
+N_PTS = data.get('n_wires', 16)
+
+field_size = data.get('field_size', {})
+XRES = field_size.get('x', 720)
+YRES = field_size.get('y', 720)
+print('Field size {}x{} with {} wires'.format(XRES,YRES, N_PTS))
+
+stroke_obj = data.get('strokes', {})
+STROKE_WIDTH = stroke_obj.get('width', 8)
+N_STROKES_X = stroke_obj.get('x', 120)
+N_STROKES_Y = stroke_obj.get('y', 120)
+TIME_STEP = stroke_obj.get('step_size', 0.5)
+TIME_STEPS = stroke_obj.get('n_steps', 40)
 TIME_LEN = TIME_STEP * TIME_STEPS
+print('Stroke quantity {}x{}, width {}, step size {}, steps {}, length {}'.format(N_STROKES_X,N_STROKES_Y,STROKE_WIDTH, TIME_STEP,TIME_STEPS,TIME_LEN))
+
+SEED = data.get('seed', None)
+if SEED is not None:
+    print('Using seed {}'.format(SEED))
+    np.random.seed(SEED)
+
+ANIMATE = data.get('animate', False)
+print('Outputting ' + ('multiple frames' if ANIMATE else 'a single image'))
 
 starttime = time.time()
+
+print('Generating data')
+# Set up our gradient map
+gradient = build_gradient(colorlist, colorpoints, resolution=GRADIENT_RES)
 
 window_x = np.linspace(0,WIDTH,XRES)
 window_y = np.linspace(0,HEIGHT,YRES)
@@ -64,7 +94,7 @@ cmap += (np.random.rand(cmap.shape[0],cmap.shape[1])-0.5)*0.001
 cmap = np.clip(cmap, 0, 1)
 
 # Set up Cairo env
-painter = CairoPainter(width=WIDTH, height=HEIGHT, bg=[0xf4/0xFF,0xf6/0xFF,0xf3/0xFF])
+painter = CairoPainter(width=WIDTH, height=HEIGHT, bg=color_from_hex(BG_COLOR))
 painter.insert_borders(XBORDER, YBORDER)
 
 # Normalize the vector field. This simplifies the streamline drawing process
@@ -91,6 +121,7 @@ startpoint_indices_ordered = np.argsort(cmap_startpoints)
 cmap += (np.random.rand(cmap.shape[0],cmap.shape[1])-0.5)*0.1
 cmap = np.clip(cmap, 0, 1)
 
+print('Painting')
 # Plot integrated strokes, in order of starting magnitude
 line_pts = np.zeros((TIME_STEPS,2))
 for startpoint_index in startpoint_indices_ordered:
@@ -124,7 +155,7 @@ for startpoint_index in startpoint_indices_ordered:
 
     # Actual line
     rgb = gradient[int(c*(GRADIENT_RES-1))]
-    painter.draw_line(line_pts[:num_line_pts], color=rgb, width=8)
+    painter.draw_line(line_pts[:num_line_pts], color=rgb, width=STROKE_WIDTH)
     if ANIMATE and startpoint_index % 10 == 0:
         painter.output_frame()
         print(painter.frame)

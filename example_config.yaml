@@ -1,0 +1,36 @@
+colors:
+  - ["fe7f2d", "fcca46"]
+  - ["fcca46", "a1c181"]
+  - ["a1c181", "619b8a"]
+  - ["619b8a", "233d4d"]
+color_points:
+  - [0.0,0.25]
+  - [0.25,0.5]
+  - [0.5,0.75]
+  - [0.75,1.0]
+gradient_res: 4096
+
+image:
+  width: 1080
+  height: 1080
+  x_border: 40
+  y_border: 40
+  bg: 'f4f6f3'
+
+n_wires: 16
+
+field_size:
+  x: 720
+  y: 720
+
+strokes:
+  width: 8
+  x: 180
+  y: 180
+  step_size: 0.5
+  n_steps: 40
+
+seed:
+  1234
+
+animate: false
